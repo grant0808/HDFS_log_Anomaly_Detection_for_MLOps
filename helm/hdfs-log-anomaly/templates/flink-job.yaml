@@ -1,0 +1,17 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "hdfs-log-anomaly.name" . }}-flink-submit
+spec:
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: flink-job
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          command: ["python", "-m", "flink.hdfs_log_job"]
+          env:
+            {{- range $key, $value := .Values.env }}
+            - name: {{ $key }}
+              value: {{ $value | quote }}
+            {{- end }}

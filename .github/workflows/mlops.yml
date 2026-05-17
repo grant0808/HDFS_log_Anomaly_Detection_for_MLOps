@@ -1,0 +1,37 @@
+name: mlops
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test-build-deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -e ".[dev]"
+      - run: pytest
+      - run: docker build -t hdfs-log-anomaly:${{ github.sha }} .
+      - name: Configure GCP auth
+        if: github.ref == 'refs/heads/main'
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+      - name: Push image
+        if: github.ref == 'refs/heads/main'
+        run: |
+          gcloud auth configure-docker ${{ vars.GCP_REGION }}-docker.pkg.dev
+          docker tag hdfs-log-anomaly:${{ github.sha }} ${{ vars.GCP_REGION }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/mlops/hdfs-log-anomaly:${{ github.sha }}
+          docker push ${{ vars.GCP_REGION }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/mlops/hdfs-log-anomaly:${{ github.sha }}
+      - name: Helm lint
+        run: helm lint helm/hdfs-log-anomaly
+      - name: ArgoCD sync
+        if: github.ref == 'refs/heads/main'
+        run: argocd app sync hdfs-log-anomaly --server "${{ secrets.ARGOCD_SERVER }}" --auth-token "${{ secrets.ARGOCD_TOKEN }}"

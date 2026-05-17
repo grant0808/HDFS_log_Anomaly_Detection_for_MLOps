@@ -1,0 +1,6 @@
+topics:
+  - hdfs.raw.logs
+  - hdfs.parsed.events
+  - hdfs.feature.windows
+  - hdfs.anomalies
+  - hdfs.inference.history

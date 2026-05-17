@@ -1,0 +1,3 @@
+job:
+  module: flink.hdfs_log_job
+  parallelism: 2

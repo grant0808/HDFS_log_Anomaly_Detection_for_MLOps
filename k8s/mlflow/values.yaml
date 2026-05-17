@@ -1,0 +1,2 @@
+backendStore: postgresql
+artifactRoot: gs://hdfs-model-artifacts/mlflow

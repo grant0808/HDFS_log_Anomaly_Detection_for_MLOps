@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: hdfs-platform-topology
+data:
+  services: |
+    kafka/
+    flink/
+    fastapi/
+    postgres/
+    clickhouse/
+    redis/
+    prometheus/
+    grafana/
+    mlflow/
+    airflow/
+    evidently/
+    ingress/

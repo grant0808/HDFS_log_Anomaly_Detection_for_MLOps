@@ -1,0 +1,61 @@
+[project]
+name = "hdfs-log-anomaly-platform"
+version = "0.1.0"
+description = "Kubernetes-ready HDFS log anomaly detection platform with Drain3, DeepLog, FastAPI, Kafka, and monitoring."
+requires-python = ">=3.11"
+dependencies = [
+  "fastapi>=0.111.0",
+  "uvicorn[standard]>=0.30.0",
+  "pydantic>=2.7.0",
+  "pydantic-settings>=2.3.0",
+  "prometheus-client>=0.20.0",
+  "structlog>=24.1.0",
+  "tenacity>=8.3.0",
+  "sqlalchemy>=2.0.30",
+  "psycopg[binary]>=3.1.19",
+  "redis>=5.0.4",
+  "clickhouse-connect>=0.7.8",
+  "confluent-kafka>=2.4.0",
+  "drain3>=0.9.11",
+  "numpy>=1.26.0",
+  "pandas>=2.2.0",
+  "google-cloud-storage>=2.16.0",
+  "opentelemetry-api>=1.24.0",
+  "opentelemetry-sdk>=1.24.0",
+  "opentelemetry-instrumentation-fastapi>=0.45b0",
+]
+
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["app*", "feature_store*", "monitoring*", "alerts*"]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.2.0",
+  "pytest-asyncio>=0.23.0",
+  "httpx>=0.27.0",
+  "ruff>=0.4.0",
+  "mypy>=1.10.0",
+]
+streaming = ["apache-flink>=1.19.0"]
+training = ["torch>=2.2.0"]
+monitoring = ["evidently>=0.4.22"]
+load = ["locust>=2.27.0"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+pythonpath = ["."]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.mypy]
+python_version = "3.11"
+warn_return_any = true
+warn_unused_configs = true
+ignore_missing_imports = true

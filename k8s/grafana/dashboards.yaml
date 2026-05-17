@@ -1,0 +1,11 @@
+dashboards:
+  hdfs:
+    panels:
+      - logs_processed_total
+      - anomalies_total
+      - anomaly_rate
+      - inference_latency
+      - data_drift_score
+      - consumer_lag
+      - unknown_template_count
+      - prediction_confidence

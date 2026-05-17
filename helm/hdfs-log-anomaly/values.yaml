@@ -1,0 +1,35 @@
+image:
+  repository: us-central1-docker.pkg.dev/local-dev/mlops/hdfs-log-anomaly
+  tag: latest
+  pullPolicy: IfNotPresent
+
+replicaCount: 2
+
+service:
+  port: 8000
+
+ingress:
+  enabled: true
+  host: hdfs-anomaly.local
+
+env:
+  GCP_PROJECT_ID: local-dev
+  GCS_RAW_BUCKET: hdfs-raw-logs
+  GCS_PROCESSED_BUCKET: hdfs-processed-logs
+  GCS_ARTIFACTS_BUCKET: hdfs-model-artifacts
+  KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+  RAW_TOPIC: hdfs.raw.logs
+  PARSED_TOPIC: hdfs.parsed.events
+  FEATURE_TOPIC: hdfs.feature.windows
+  ANOMALY_TOPIC: hdfs.anomalies
+  INFERENCE_TOPIC: hdfs.inference.history
+  POSTGRES_DSN: postgresql+psycopg://hdfs:hdfs@postgres:5432/hdfs
+  REDIS_URL: redis://redis:6379/0
+
+resources:
+  requests:
+    cpu: 250m
+    memory: 512Mi
+  limits:
+    cpu: "1"
+    memory: 1Gi
