@@ -15,6 +15,7 @@ def process_log_line(message: str) -> dict[str, object] | None:
     parsed = parser.parse(RawLog(message=message))
     window = windows.add(parsed)
     return {
+        "message_type": "feature_window" if window is not None else "parsed_log",
         "parsed": parsed.model_dump(mode="json"),
         "window": None if window is None else window.__dict__,
         "features": None if window is None else extract_window_features(window),
@@ -47,7 +48,7 @@ def main() -> None:
         .set_bootstrap_servers(settings.kafka_bootstrap_servers)
         .set_record_serializer(
             KafkaRecordSerializationSchema.builder()
-            .set_topic(settings.parsed_topic)
+            .set_topic(settings.feature_topic)
             .set_value_serialization_schema(SimpleStringSchema())
             .build()
         )

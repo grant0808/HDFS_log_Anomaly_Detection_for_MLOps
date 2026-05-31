@@ -18,6 +18,7 @@ jobs:
       - run: pip install -e ".[dev]"
       - run: pytest
       - run: docker build -t hdfs-log-anomaly:${{ github.sha }} .
+      - run: docker build -f Dockerfile.streaming -t hdfs-log-anomaly-streaming:${{ github.sha }} .
       - name: Configure GCP auth
         if: github.ref == 'refs/heads/main'
         uses: google-github-actions/auth@v2
@@ -30,6 +31,8 @@ jobs:
           gcloud auth configure-docker ${{ vars.GCP_REGION }}-docker.pkg.dev
           docker tag hdfs-log-anomaly:${{ github.sha }} ${{ vars.GCP_REGION }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/mlops/hdfs-log-anomaly:${{ github.sha }}
           docker push ${{ vars.GCP_REGION }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/mlops/hdfs-log-anomaly:${{ github.sha }}
+          docker tag hdfs-log-anomaly-streaming:${{ github.sha }} ${{ vars.GCP_REGION }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/mlops/hdfs-log-anomaly-streaming:${{ github.sha }}
+          docker push ${{ vars.GCP_REGION }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/mlops/hdfs-log-anomaly-streaming:${{ github.sha }}
       - name: Helm lint
         run: helm lint helm/hdfs-log-anomaly
       - name: ArgoCD sync

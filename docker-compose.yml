@@ -9,6 +9,25 @@ services:
       SMTP_HOST: mailhog
       SMTP_PORT: 1025
     depends_on: [postgres, redis, kafka, clickhouse, mailhog]
+  inference-worker:
+    profiles: ["streaming"]
+    build:
+      context: .
+      dockerfile: Dockerfile.streaming
+    command: python -m app.workers.inference_worker
+    environment:
+      POSTGRES_DSN: postgresql+psycopg://hdfs:hdfs@postgres:5432/hdfs
+      REDIS_URL: redis://redis:6379/0
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      FEATURE_TOPIC: hdfs.feature.windows
+      ANOMALY_TOPIC: hdfs.anomalies
+      INFERENCE_TOPIC: hdfs.inference.history
+      CLICKHOUSE_HOST: clickhouse
+      CLICKHOUSE_ENABLED: "true"
+      SMTP_HOST: mailhog
+      SMTP_PORT: 1025
+    depends_on: [postgres, redis, kafka, clickhouse]
+    restart: on-failure
   postgres:
     image: postgres:16
     environment:

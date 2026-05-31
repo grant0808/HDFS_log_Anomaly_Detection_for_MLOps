@@ -9,6 +9,8 @@ COPY app app
 COPY feature_store feature_store
 COPY monitoring monitoring
 COPY alerts alerts
+COPY flink flink
+COPY scripts scripts
 COPY artifacts artifacts
 COPY data data
 

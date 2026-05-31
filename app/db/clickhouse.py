@@ -1,7 +1,5 @@
 from typing import Any
 
-import clickhouse_connect
-
 from app.config import Settings
 
 
@@ -11,6 +9,8 @@ class ClickHouseHistoryWriter:
         self.client = None
 
     def connect(self) -> None:
+        import clickhouse_connect
+
         self.client = clickhouse_connect.get_client(
             host=self.settings.clickhouse_host,
             port=self.settings.clickhouse_port,

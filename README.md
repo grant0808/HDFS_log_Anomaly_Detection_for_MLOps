@@ -16,7 +16,7 @@ GitHub Actions -> Docker Build -> Artifact Registry -> Helm + ArgoCD -> Kubernet
 현재 구현:
 HDFS Logs -> FastAPI /parse -> Drain3 -> PostgreSQL
 Event Sequence -> FastAPI /predict -> DeepLog or Rule fallback -> PostgreSQL
-Kafka raw logs -> PyFlink parser job -> Kafka parsed topic
+Kafka raw logs -> PyFlink parser/window job -> Kafka feature topic -> inference worker -> Kafka anomaly/history topics
 
 Monitoring: Prometheus + Grafana + MLflow + Evidently + SMTP alerts
 Storage:    GCS + PostgreSQL + ClickHouse + Redis
@@ -45,8 +45,8 @@ Storage:    GCS + PostgreSQL + ClickHouse + Redis
 | --- | --- | --- |
 | 파싱/API | `/parse`, `/predict`, `/metrics`, `/drift`, `/anomalies` 제공 | 인증, 요청 제한, 장애 응답 표준화 |
 | 모델 추론 | DeepLog 아티팩트가 있으면 사용하고 실패 시 규칙 기반 fallback | MLflow Registry 연동, 모델 버전 자동 로딩 |
-| 스트리밍 | Kafka raw topic을 읽어 parsed topic으로 발행하는 PyFlink 작업 | feature/anomaly/history topic 연결, inference worker 추가 |
-| 저장소 | PostgreSQL 메타데이터/feature/inference 테이블, ClickHouse writer 코드 | API와 ClickHouse writer 연결, 마이그레이션 관리 |
+| 스트리밍 | Kafka raw topic을 읽어 feature topic으로 발행하는 PyFlink 작업과 inference worker | 운영 Kafka/Flink 배포 검증, backpressure/lag 관리 |
+| 저장소 | PostgreSQL 메타데이터/feature/inference 테이블, ClickHouse writer 코드와 worker 연결 옵션 | schema migration 관리 |
 | 학습 | 로컬 DeepLog 학습 스크립트, Airflow DAG 골격 | 데이터 준비, 평가 기준, MLflow logging/register/promote 구현 |
 | 모니터링 | Prometheus metric과 drift 계산 함수 | 실제 reference/current 데이터 연결, Alertmanager/SMTP 룰 연결 |
 | 배포 | Docker Compose, Helm, ArgoCD, GitHub Actions | Secret 참조, Workload Identity, streaming 이미지 전략 |
@@ -93,6 +93,12 @@ Kafka, PostgreSQL, ClickHouse, Redis, MLflow, Prometheus, Grafana, MailHog, Fast
 docker compose up --build
 ```
 
+streaming inference worker까지 함께 실행하려면 profile을 활성화합니다.
+
+```bash
+docker compose --profile streaming up --build
+```
+
 주요 접속 주소:
 
 - FastAPI: `http://localhost:8000/docs`
@@ -126,12 +132,16 @@ MLflow는 Python 런타임 의존성이 아니라 Docker Compose/Kubernetes 서�
 
 ## 스트리밍 파이프라인
 
-PyFlink 작업은 Kafka의 `hdfs.raw.logs` 토픽에서 원본 로그를 읽고, Drain3 파싱 및 윈도우 생성을 거쳐 `hdfs.parsed.events` 토픽으로 결과를 발행합니다.
+PyFlink 작업은 Kafka의 `hdfs.raw.logs` 토픽에서 원본 로그를 읽고, Drain3 파싱 및 윈도우 생성을 거쳐 `hdfs.feature.windows` 토픽으로 결과를 발행합니다. 윈도우가 아직 완성되지 않은 메시지는 `window: null`로 발행되고, inference worker는 완성된 윈도우만 추론합니다.
 
-주의: 현재 PyFlink 작업은 파싱 결과와 윈도우 feature를 한 메시지로 발행하는 단계입니다. FastAPI 추론 호출, `hdfs.anomalies`, `hdfs.inference.history` 발행은 운영 보강 항목입니다.
+inference worker는 `hdfs.feature.windows`를 소비해 DeepLog 또는 규칙 기반 fallback으로 추론하고, `hdfs.anomalies`, `hdfs.inference.history` 토픽으로 결과를 발행합니다.
 
 ```bash
 python -m flink.hdfs_log_job
+```
+
+```bash
+python -m app.workers.inference_worker
 ```
 
 샘플 HDFS 로그를 Kafka로 전송하려면 아래 스크립트를 실행합니다.
@@ -183,6 +193,7 @@ Prometheus로 노출되는 주요 메트릭:
 - `data_drift_score`
 - `consumer_lag`
 - `unknown_template_count`
+- `model_fallbacks_total`
 - `model_version`
 - `prediction_confidence`
 
@@ -238,6 +249,8 @@ kubectl apply -f argocd/application.yaml
 - 모델 아티팩트 다운로드/initContainer 또는 shared volume 전략
 - PostgreSQL/ClickHouse schema migration 절차
 - Prometheus alert rule과 SMTP/Alertmanager 연결
+
+API 이미지는 `Dockerfile`, streaming/Flink/worker 이미지는 `Dockerfile.streaming`을 기준으로 빌드할 수 있습니다.
 
 ## CI/CD
 

@@ -6,6 +6,7 @@ data:
   services: |
     kafka/
     flink/
+    inference-worker/
     fastapi/
     postgres/
     clickhouse/

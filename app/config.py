@@ -17,6 +17,7 @@ class Settings(BaseSettings):
     clickhouse_user: str = "default"
     clickhouse_password: str = ""
     clickhouse_database: str = "hdfs_observability"
+    clickhouse_enabled: bool = False
     redis_url: str = "redis://localhost:6379/0"
 
     kafka_bootstrap_servers: str = "localhost:9092"

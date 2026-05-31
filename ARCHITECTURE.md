@@ -44,10 +44,18 @@ PyFlink hdfs_log_job
   |-- Drain3 parsing
   |-- Sliding window feature extraction
   v
-Kafka hdfs.parsed.events
+Kafka hdfs.feature.windows
+  |
+  v
+Inference worker
+  |
+  |-- Kafka hdfs.anomalies
+  |-- Kafka hdfs.inference.history
+  |-- inference_history(PostgreSQL)
+  |-- inference_history(ClickHouse, optional)
 ```
 
-현재 구현은 API 기반 파싱/추론과 Kafka 기반 파싱 작업을 각각 제공합니다. 스트리밍 작업이 FastAPI 추론 또는 anomaly topic까지 이어지는 구조는 아직 연결되어 있지 않습니다.
+현재 구현은 API 기반 파싱/추론과 Kafka 기반 PyFlink/worker 추론 경로를 제공합니다. 운영 Kafka/Flink 클러스터에서의 backpressure, consumer lag, 재처리 정책은 배포 환경에서 추가 검증해야 합니다.
 
 ## 3. 목표 운영 아키텍처
 
@@ -158,9 +166,9 @@ GCS raw logs
 ### P0: 실행 경로 정합성
 
 - API 이미지와 streaming job 이미지 전략을 결정합니다.
-- Helm `flink-submit` Job이 실행할 이미지에 `flink/` 코드와 `apache-flink` 의존성을 포함합니다.
-- `hdfs.feature.windows`, `hdfs.anomalies`, `hdfs.inference.history` topic 생산자를 구현합니다.
-- FastAPI 또는 별도 inference worker가 Kafka feature window를 소비하도록 연결합니다.
+- Helm `flink-submit` Job이 실행할 streaming 이미지에 `flink/` 코드와 `apache-flink` 의존성을 포함합니다.
+- `hdfs.feature.windows`, `hdfs.anomalies`, `hdfs.inference.history` topic 생산자를 운영 Kafka에서 검증합니다.
+- 별도 inference worker가 Kafka feature window를 소비하도록 배포합니다.
 
 ### P1: 모델 운영
 
@@ -174,12 +182,12 @@ GCS raw logs
 - `/drift`를 샘플 DataFrame이 아니라 reference dataset과 최근 inference history에 연결합니다.
 - Prometheus alert rule을 추가합니다.
 - Alertmanager 또는 SMTP 발송 경로를 실제 메트릭 임계값과 연결합니다.
-- Kafka consumer lag, model fallback rate, unknown template rate를 핵심 SLO 지표로 관리합니다.
+- Kafka consumer lag, `model_fallbacks_total`, unknown template rate를 핵심 SLO 지표로 관리합니다.
 
 ### P2: 보안과 배포
 
-- Helm values의 평문 DB 접속 정보를 Secret 또는 External Secrets로 이동합니다.
-- GKE Workload Identity serviceAccount를 Helm chart에 반영합니다.
+- Helm values의 평문 DB 접속 정보를 Secret 또는 External Secrets로 이동합니다. 차트는 `envFrom.secretRef`를 지원합니다.
+- GKE Workload Identity serviceAccount를 Helm chart에 반영합니다. 차트는 ServiceAccount annotation을 지원합니다.
 - PostgreSQL/ClickHouse schema migration 절차를 추가합니다.
 - Docker image vulnerability scan과 dependency lock 정책을 추가합니다.
 

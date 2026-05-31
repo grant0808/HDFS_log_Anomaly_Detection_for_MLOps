@@ -3,7 +3,17 @@ image:
   tag: latest
   pullPolicy: IfNotPresent
 
+streamingImage:
+  repository: us-central1-docker.pkg.dev/local-dev/mlops/hdfs-log-anomaly-streaming
+  tag: latest
+  pullPolicy: IfNotPresent
+
 replicaCount: 2
+
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}
 
 service:
   port: 8000
@@ -25,8 +35,32 @@ env:
   INFERENCE_TOPIC: hdfs.inference.history
   POSTGRES_DSN: postgresql+psycopg://hdfs:hdfs@postgres:5432/hdfs
   REDIS_URL: redis://redis:6379/0
+  CLICKHOUSE_HOST: clickhouse
+  CLICKHOUSE_PORT: "8123"
+  CLICKHOUSE_DATABASE: hdfs_observability
+  CLICKHOUSE_ENABLED: "false"
+
+secret:
+  create: false
+  name: hdfs-platform-secrets
+  data: {}
+
+streaming:
+  flinkJob:
+    enabled: true
+  inferenceWorker:
+    enabled: true
+    replicaCount: 1
 
 resources:
+  requests:
+    cpu: 250m
+    memory: 512Mi
+  limits:
+    cpu: "1"
+    memory: 1Gi
+
+workerResources:
   requests:
     cpu: 250m
     memory: 512Mi

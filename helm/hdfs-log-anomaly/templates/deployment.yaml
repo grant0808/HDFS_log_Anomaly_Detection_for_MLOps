@@ -16,6 +16,7 @@ spec:
         prometheus.io/path: /metrics
         prometheus.io/port: "8000"
     spec:
+      serviceAccountName: {{ include "hdfs-log-anomaly.serviceAccountName" . }}
       containers:
         - name: api
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
@@ -23,10 +24,14 @@ spec:
           ports:
             - containerPort: 8000
           env:
-            {{- range $key, $value := .Values.env }}
+{{ range $key, $value := .Values.env }}
             - name: {{ $key }}
               value: {{ $value | quote }}
-            {{- end }}
+{{ end }}
+          envFrom:
+            - secretRef:
+                name: {{ .Values.secret.name }}
+                optional: true
           readinessProbe:
             httpGet:
               path: /health

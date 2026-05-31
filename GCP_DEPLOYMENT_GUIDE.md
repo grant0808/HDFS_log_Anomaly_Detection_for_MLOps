@@ -38,6 +38,7 @@ export CLUSTER_NAME="hdfs-observability-gke"
 export NAMESPACE="hdfs-observability"
 export REPOSITORY="mlops"
 export IMAGE_NAME="hdfs-log-anomaly"
+export STREAMING_IMAGE_NAME="hdfs-log-anomaly-streaming"
 export IMAGE_TAG="v0.1.0"
 ```
 
@@ -115,6 +116,9 @@ gcloud auth configure-docker ${REGION}-docker.pkg.dev
 ```bash
 docker build -t ${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPOSITORY}/${IMAGE_NAME}:${IMAGE_TAG} .
 docker push ${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPOSITORY}/${IMAGE_NAME}:${IMAGE_TAG}
+
+docker build -f Dockerfile.streaming -t ${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPOSITORY}/${STREAMING_IMAGE_NAME}:${IMAGE_TAG} .
+docker push ${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPOSITORY}/${STREAMING_IMAGE_NAME}:${IMAGE_TAG}
 ```
 
 ## 5. GKE 클러스터 생성
@@ -311,6 +315,14 @@ image:
   repository: asia-northeast3-docker.pkg.dev/your-gcp-project/mlops/hdfs-log-anomaly
   tag: v0.1.0
 
+streamingImage:
+  repository: asia-northeast3-docker.pkg.dev/your-gcp-project/mlops/hdfs-log-anomaly-streaming
+  tag: v0.1.0
+
+serviceAccount:
+  annotations:
+    iam.gke.io/gcp-service-account: hdfs-anomaly-platform@your-gcp-project.iam.gserviceaccount.com
+
 env:
   GCP_PROJECT_ID: your-gcp-project
   GCS_RAW_BUCKET: your-gcp-project-hdfs-raw-logs
@@ -324,7 +336,7 @@ env:
   INFERENCE_TOPIC: hdfs.inference.history
 ```
 
-현재 차트는 기본 env 값을 직접 주입합니다. 운영 보안을 강화하려면 `templates/deployment.yaml`에서 Secret 기반 `envFrom` 또는 `valueFrom.secretKeyRef`로 전환하는 것을 권장합니다.
+차트는 `secret.name`을 `envFrom.secretRef`로 참조합니다. 운영 접속 정보는 `secret.create=false`로 두고 External Secrets 또는 사전에 생성한 Kubernetes Secret을 연결하는 구성을 권장합니다.
 
 ## 11. 애플리케이션 배포
 
@@ -340,7 +352,9 @@ helm lint helm/hdfs-log-anomaly
 helm upgrade --install hdfs-log-anomaly helm/hdfs-log-anomaly \
   --namespace ${NAMESPACE} \
   --set image.repository=${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPOSITORY}/${IMAGE_NAME} \
+  --set streamingImage.repository=${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPOSITORY}/${STREAMING_IMAGE_NAME} \
   --set image.tag=${IMAGE_TAG} \
+  --set streamingImage.tag=${IMAGE_TAG} \
   --set env.GCP_PROJECT_ID=${PROJECT_ID} \
   --set env.GCS_RAW_BUCKET=${PROJECT_ID}-hdfs-raw-logs \
   --set env.GCS_PROCESSED_BUCKET=${PROJECT_ID}-hdfs-processed-logs \

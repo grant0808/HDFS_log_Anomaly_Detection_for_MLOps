@@ -1,3 +1,4 @@
+{{- if .Values.streaming.flinkJob.enabled }}
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -6,12 +7,19 @@ spec:
   template:
     spec:
       restartPolicy: OnFailure
+      serviceAccountName: {{ include "hdfs-log-anomaly.serviceAccountName" . }}
       containers:
         - name: flink-job
-          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          image: "{{ .Values.streamingImage.repository }}:{{ .Values.streamingImage.tag }}"
+          imagePullPolicy: {{ .Values.streamingImage.pullPolicy }}
           command: ["python", "-m", "flink.hdfs_log_job"]
           env:
-            {{- range $key, $value := .Values.env }}
+{{ range $key, $value := .Values.env }}
             - name: {{ $key }}
               value: {{ $value | quote }}
-            {{- end }}
+{{ end }}
+          envFrom:
+            - secretRef:
+                name: {{ .Values.secret.name }}
+                optional: true
+{{- end }}

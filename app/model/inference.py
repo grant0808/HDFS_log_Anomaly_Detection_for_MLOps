@@ -1,7 +1,14 @@
 import time
 
 from app.config import Settings
-from app.metrics import ANOMALIES, ANOMALY_RATE, INFERENCE_LATENCY, MODEL_VERSION, PREDICTION_CONFIDENCE
+from app.metrics import (
+    ANOMALIES,
+    ANOMALY_RATE,
+    INFERENCE_LATENCY,
+    MODEL_FALLBACKS,
+    MODEL_VERSION,
+    PREDICTION_CONFIDENCE,
+)
 from app.model.deeplog import DeepLogModel
 from app.model.rules import RuleDetector
 from app.schemas import PredictRequest, PredictResponse
@@ -25,6 +32,7 @@ class InferenceService:
             model_version = self.settings.model_version
         except Exception:
             rule_fallback = True
+            MODEL_FALLBACKS.inc()
             top_k, probabilities = self.rules.predict_next(request.sequence)
             model_version = f"{self.settings.model_version}:rules"
 
