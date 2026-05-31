@@ -1,17 +1,22 @@
 # HDFS 로그 이상 탐지 플랫폼
 
-HDFS 로그를 실시간으로 수집, 파싱, 특징화하고 DeepLog 기반 모델로 이상 여부를 판단하는 Kubernetes 기반 MLOps 관측 플랫폼입니다.
+HDFS 로그를 수집, 파싱, 특징화하고 DeepLog 기반 모델 또는 규칙 기반 fallback으로 이상 여부를 판단하는 Kubernetes 지향 MLOps 관측 플랫폼입니다.
 
-이 프로젝트는 로컬 개발 환경에서는 Docker Compose로 전체 흐름을 실행할 수 있고, 운영 환경에서는 GitHub Actions, Artifact Registry, Helm, ArgoCD를 통해 Kubernetes에 배포할 수 있도록 구성되어 있습니다.
+이 프로젝트는 로컬 개발 환경에서는 Docker Compose로 API와 관측 스택을 실행할 수 있고, 운영 환경에서는 GitHub Actions, Artifact Registry, Helm, ArgoCD를 통해 Kubernetes에 배포할 수 있도록 구성되어 있습니다.
+
+현재 저장소는 운영 아키텍처의 기준 구현과 배포 골격을 제공하는 MVP입니다. 실시간 스트리밍 추론, 모델 자동 승격, 운영 알림 룰은 일부 스캐폴딩 상태이므로 운영 배포 전 `ARCHITECTURE.md`의 보강 로드맵을 확인해야 합니다.
 
 ## 아키텍처
+
+상세 아키텍처와 현재 구현/목표 구현의 차이는 `ARCHITECTURE.md`를 참고합니다.
 
 ```text
 GitHub Actions -> Docker Build -> Artifact Registry -> Helm + ArgoCD -> Kubernetes
 
-HDFS Logs -> Kafka -> PyFlink -> Drain3 -> Feature Extraction -> FastAPI Inference
-                                                                  -> Kafka anomaly topic
-                                                                  -> PostgreSQL + ClickHouse
+현재 구현:
+HDFS Logs -> FastAPI /parse -> Drain3 -> PostgreSQL
+Event Sequence -> FastAPI /predict -> DeepLog or Rule fallback -> PostgreSQL
+Kafka raw logs -> PyFlink parser job -> Kafka parsed topic
 
 Monitoring: Prometheus + Grafana + MLflow + Evidently + SMTP alerts
 Storage:    GCS + PostgreSQL + ClickHouse + Redis
@@ -29,10 +34,22 @@ Storage:    GCS + PostgreSQL + ClickHouse + Redis
 - Prometheus 메트릭 노출 및 Grafana 연동
 - Evidently 스타일 데이터 드리프트 계산
 - SMTP 이메일 알림
-- PyFlink + Kafka 스트리밍 파이프라인
-- Airflow 학습 DAG 및 MLflow 운영 구성
+- PyFlink + Kafka 스트리밍 파이프라인 골격
+- Airflow 학습 DAG 및 MLflow 운영 구성 골격
 - Docker Compose 로컬 실행 모드
 - Helm + ArgoCD Kubernetes 배포 모드
+
+## 구현 상태 요약
+
+| 영역 | 현재 상태 | 운영 전 보강 필요 |
+| --- | --- | --- |
+| 파싱/API | `/parse`, `/predict`, `/metrics`, `/drift`, `/anomalies` 제공 | 인증, 요청 제한, 장애 응답 표준화 |
+| 모델 추론 | DeepLog 아티팩트가 있으면 사용하고 실패 시 규칙 기반 fallback | MLflow Registry 연동, 모델 버전 자동 로딩 |
+| 스트리밍 | Kafka raw topic을 읽어 parsed topic으로 발행하는 PyFlink 작업 | feature/anomaly/history topic 연결, inference worker 추가 |
+| 저장소 | PostgreSQL 메타데이터/feature/inference 테이블, ClickHouse writer 코드 | API와 ClickHouse writer 연결, 마이그레이션 관리 |
+| 학습 | 로컬 DeepLog 학습 스크립트, Airflow DAG 골격 | 데이터 준비, 평가 기준, MLflow logging/register/promote 구현 |
+| 모니터링 | Prometheus metric과 drift 계산 함수 | 실제 reference/current 데이터 연결, Alertmanager/SMTP 룰 연결 |
+| 배포 | Docker Compose, Helm, ArgoCD, GitHub Actions | Secret 참조, Workload Identity, streaming 이미지 전략 |
 
 ## 로컬 빠른 실행
 
@@ -105,11 +122,13 @@ python -m app.training.train_deeplog --input data/sample/hdfs_events.txt --outpu
 
 Airflow 학습 DAG는 `airflow/dags/hdfs_training_pipeline.py`에 있습니다.
 
-MLflow는 Python 런타임 의존성이 아니라 Docker Compose/Kubernetes 서비스로 배포됩니다. Drain3가 구버전 `cachetools`를 고정하고 있어 최신 MLflow 클라이언트와 의존성 충돌이 발생할 수 있기 때문입니다.
+MLflow는 Python 런타임 의존성이 아니라 Docker Compose/Kubernetes 서비스로 배포됩니다. Drain3가 구버전 `cachetools`를 고정하고 있어 최신 MLflow 클라이언트와 의존성 충돌이 발생할 수 있기 때문입니다. 현재 Airflow DAG는 운영 흐름을 설명하는 골격이며, 실제 MLflow experiment logging과 model registry promotion은 보강 대상입니다.
 
 ## 스트리밍 파이프라인
 
 PyFlink 작업은 Kafka의 `hdfs.raw.logs` 토픽에서 원본 로그를 읽고, Drain3 파싱 및 윈도우 생성을 거쳐 `hdfs.parsed.events` 토픽으로 결과를 발행합니다.
+
+주의: 현재 PyFlink 작업은 파싱 결과와 윈도우 feature를 한 메시지로 발행하는 단계입니다. FastAPI 추론 호출, `hdfs.anomalies`, `hdfs.inference.history` 발행은 운영 보강 항목입니다.
 
 ```bash
 python -m flink.hdfs_log_job
@@ -169,13 +188,15 @@ Prometheus로 노출되는 주요 메트릭:
 
 드리프트 계산 코드는 `monitoring/evidently`에 있고, SMTP 이메일 알림 코드는 `alerts`에 있습니다.
 
-알림 조건:
+운영 알림 조건으로 사용할 기준:
 
 - 데이터 드리프트 임계값 초과
 - 이상 탐지 급증
 - 추론 지연 시간 급증
 - Kafka consumer lag 증가
 - 모델 장애
+
+현재 `/drift` 엔드포인트는 샘플 reference/current 데이터로 계산합니다. 운영에서는 ClickHouse 또는 PostgreSQL의 최근 추론 이력과 학습 기준 데이터를 연결해야 합니다.
 
 ## Kubernetes 배포
 
@@ -210,6 +231,14 @@ kubectl apply -f argocd/application.yaml
 - ArgoCD 접근 토큰
 - Kubernetes Secret 및 Helm values
 
+추가로 점검해야 할 항목:
+
+- Helm values의 평문 접속 정보 제거 및 Secret/External Secrets 참조
+- API 이미지와 streaming job 이미지 분리 또는 streaming extra 포함 이미지 빌드
+- 모델 아티팩트 다운로드/initContainer 또는 shared volume 전략
+- PostgreSQL/ClickHouse schema migration 절차
+- Prometheus alert rule과 SMTP/Alertmanager 연결
+
 ## CI/CD
 
 GitHub Actions 워크플로는 `.github/workflows/mlops.yml`에 있습니다.
@@ -240,6 +269,12 @@ python -m ruff check .
 
 ```bash
 python -m compileall app feature_store monitoring alerts flink scripts tests
+```
+
+macOS 등 일부 환경에서 `python` 명령이 없으면 `python3`를 사용합니다. bytecode cache 권한 문제가 있으면 아래처럼 캐시 위치를 작업 가능한 디렉터리로 지정합니다.
+
+```bash
+PYTHONPYCACHEPREFIX=/private/tmp/hdfs_pycache python3 -m compileall app feature_store monitoring alerts flink scripts tests
 ```
 
 현재 테스트 범위:
