@@ -6,7 +6,7 @@ metadata:
 spec:
   project: default
   source:
-    repoURL: https://github.com/your-org/hdfs-log-anomaly-platform.git
+    repoURL: https://github.com/grant0808/HDFS_log_Anomaly_Detection_for_MLOps.git
     targetRevision: main
     path: helm/hdfs-log-anomaly
   destination:

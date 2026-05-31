@@ -19,12 +19,16 @@ jobs:
       - run: pytest
       - run: docker build -t hdfs-log-anomaly:${{ github.sha }} .
       - run: docker build -f Dockerfile.streaming -t hdfs-log-anomaly-streaming:${{ github.sha }} .
+      - uses: azure/setup-helm@v4
       - name: Configure GCP auth
         if: github.ref == 'refs/heads/main'
         uses: google-github-actions/auth@v2
         with:
           workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
           service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+      - name: Set up gcloud
+        if: github.ref == 'refs/heads/main'
+        uses: google-github-actions/setup-gcloud@v2
       - name: Push image
         if: github.ref == 'refs/heads/main'
         run: |
@@ -35,6 +39,23 @@ jobs:
           docker push ${{ vars.GCP_REGION }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/mlops/hdfs-log-anomaly-streaming:${{ github.sha }}
       - name: Helm lint
         run: helm lint helm/hdfs-log-anomaly
+      - name: Set up ArgoCD CLI
+        if: github.ref == 'refs/heads/main'
+        run: |
+          curl -sSL -o argocd https://github.com/argoproj/argo-cd/releases/latest/download/argocd-linux-amd64
+          chmod +x argocd
+          sudo mv argocd /usr/local/bin/argocd
       - name: ArgoCD sync
         if: github.ref == 'refs/heads/main'
-        run: argocd app sync hdfs-log-anomaly --server "${{ secrets.ARGOCD_SERVER }}" --auth-token "${{ secrets.ARGOCD_TOKEN }}"
+        run: |
+          argocd app set hdfs-log-anomaly \
+            --server "${{ secrets.ARGOCD_SERVER }}" \
+            --auth-token "${{ secrets.ARGOCD_TOKEN }}" \
+            -p image.repository=${{ vars.GCP_REGION }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/mlops/hdfs-log-anomaly \
+            -p image.tag=${{ github.sha }} \
+            -p streamingImage.repository=${{ vars.GCP_REGION }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/mlops/hdfs-log-anomaly-streaming \
+            -p streamingImage.tag=${{ github.sha }} \
+            -p env.GCP_PROJECT_ID=${{ vars.GCP_PROJECT_ID }}
+          argocd app sync hdfs-log-anomaly \
+            --server "${{ secrets.ARGOCD_SERVER }}" \
+            --auth-token "${{ secrets.ARGOCD_TOKEN }}"
