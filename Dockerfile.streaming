@@ -1,0 +1,19 @@
+FROM python:3.11-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
+
+WORKDIR /app
+COPY pyproject.toml README.md ./
+COPY app app
+COPY feature_store feature_store
+COPY monitoring monitoring
+COPY alerts alerts
+COPY flink flink
+COPY scripts scripts
+COPY artifacts artifacts
+COPY data data
+
+RUN pip install --no-cache-dir ".[streaming]"
+
+CMD ["python", "-m", "app.workers.inference_worker"]

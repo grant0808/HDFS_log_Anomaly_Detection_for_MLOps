@@ -1,0 +1,33 @@
+{{- if .Values.streaming.inferenceWorker.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "hdfs-log-anomaly.name" . }}-inference-worker
+spec:
+  replicas: {{ .Values.streaming.inferenceWorker.replicaCount }}
+  selector:
+    matchLabels:
+      app: {{ include "hdfs-log-anomaly.name" . }}-inference-worker
+  template:
+    metadata:
+      labels:
+        app: {{ include "hdfs-log-anomaly.name" . }}-inference-worker
+    spec:
+      serviceAccountName: {{ include "hdfs-log-anomaly.serviceAccountName" . }}
+      containers:
+        - name: inference-worker
+          image: "{{ .Values.streamingImage.repository }}:{{ .Values.streamingImage.tag }}"
+          imagePullPolicy: {{ .Values.streamingImage.pullPolicy }}
+          command: ["python", "-m", "app.workers.inference_worker"]
+          env:
+{{ range $key, $value := .Values.env }}
+            - name: {{ $key }}
+              value: {{ $value | quote }}
+{{ end }}
+          envFrom:
+            - secretRef:
+                name: {{ .Values.secret.name }}
+                optional: true
+          resources:
+            {{- toYaml .Values.workerResources | nindent 12 }}
+{{- end }}
