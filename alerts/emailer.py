@@ -11,16 +11,22 @@ class EmailAlerter:
         self.settings = settings
 
     def send(self, subject: str, body: str) -> None:
+        import structlog
+        logger = structlog.get_logger()
         message = EmailMessage()
         message["From"] = self.settings.smtp_from
         message["To"] = self.settings.smtp_to
         message["Subject"] = subject
         message.set_content(body)
-        with smtplib.SMTP(self.settings.smtp_host, self.settings.smtp_port, timeout=10) as smtp:
-            if self.settings.smtp_user:
-                smtp.starttls()
-                smtp.login(self.settings.smtp_user, self.settings.smtp_password)
-            smtp.send_message(message)
+        try:
+            with smtplib.SMTP(self.settings.smtp_host, self.settings.smtp_port, timeout=5) as smtp:
+                if self.settings.smtp_user:
+                    smtp.starttls()
+                    smtp.login(self.settings.smtp_user, self.settings.smtp_password)
+                smtp.send_message(message)
+        except Exception as exc:
+            logger.error("Failed to send SMTP alert email", error=str(exc))
+
 
 
 @dataclass(frozen=True)

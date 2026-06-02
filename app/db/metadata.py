@@ -105,3 +105,15 @@ class MetadataRepository:
                     created_at=datetime.utcnow(),
                 )
             )
+
+    def get_recent_logs(self, limit: int = 1000) -> list[dict[str, Any]]:
+        query = select(
+            parsed_logs.c.template_id,
+            parsed_logs.c.event_id,
+            parsed_logs.c.timestamp,
+            parsed_logs.c.host,
+            parsed_logs.c.sequence_id
+        ).order_by(parsed_logs.c.timestamp.desc()).limit(limit)
+        with self.engine.begin() as conn:
+            return [dict(row._mapping) for row in conn.execute(query)]
+

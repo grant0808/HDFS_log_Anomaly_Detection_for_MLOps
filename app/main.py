@@ -14,6 +14,7 @@ from app.parser import HDFSLogParser
 from app.schemas import PredictRequest, PredictResponse, RawLog
 from app.telemetry import configure_tracing
 from monitoring.evidently import DriftService
+from alerts import AlertManager, EmailAlerter
 
 settings = get_settings()
 configure_logging(settings.log_level)
@@ -23,8 +24,10 @@ parser = HDFSLogParser()
 inference = InferenceService(settings)
 repo = MetadataRepository(settings.postgres_dsn)
 drift_service = DriftService()
+emailer = EmailAlerter(settings)
+alert_manager = AlertManager(settings, emailer)
 reference_df = pd.DataFrame({"template_id": ["T001", "T002"], "anomaly": [0, 0], "confidence": [0.9, 0.85]})
-current_df = reference_df.copy()
+
 
 
 @app.on_event("startup")
@@ -69,9 +72,21 @@ def metrics() -> Response:
 
 @app.get("/drift")
 def drift() -> dict[str, object]:
+    logs = repo.get_recent_logs(limit=1000)
+    if not logs:
+        current_df = reference_df.copy()
+    else:
+        current_df = pd.DataFrame(logs)
+        if "anomaly" not in current_df.columns:
+            current_df["anomaly"] = 0
+        if "confidence" not in current_df.columns:
+            current_df["confidence"] = 1.0
+
     report = drift_service.compute(reference_df, current_df)
     DATA_DRIFT_SCORE.set(report.data_drift_score)
+    alert_manager.evaluate(drift=report)
     return report.__dict__
+
 
 
 @app.get("/anomalies")

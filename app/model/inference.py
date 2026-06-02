@@ -23,6 +23,11 @@ class InferenceService:
         self._recent_anomalies = 0
         MODEL_VERSION.labels(version=settings.model_version).set(1)
 
+        from alerts import AlertManager, EmailAlerter
+        self.alerter = EmailAlerter(settings)
+        self.alert_manager = AlertManager(settings, self.alerter)
+
+
     def predict(self, request: PredictRequest) -> PredictResponse:
         start = time.perf_counter()
         self.rules.observe(request.sequence, request.actual_event)
@@ -35,6 +40,7 @@ class InferenceService:
             MODEL_FALLBACKS.inc()
             top_k, probabilities = self.rules.predict_next(request.sequence)
             model_version = f"{self.settings.model_version}:rules"
+            self.alert_manager.evaluate(model_failure=True)
 
         actual = request.actual_event
         anomaly = bool(actual and actual not in top_k)
@@ -43,6 +49,9 @@ class InferenceService:
 
         confidence = max(probabilities.values()) if probabilities else 0.0
         latency_ms = (time.perf_counter() - start) * 1000
+        if latency_ms > self.settings.alert_latency_ms_threshold:
+            self.alert_manager.evaluate(latency_ms=latency_ms)
+
         self._recent_predictions += 1
         if anomaly:
             self._recent_anomalies += 1
