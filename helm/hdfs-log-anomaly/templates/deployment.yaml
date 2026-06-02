@@ -17,6 +17,27 @@ spec:
         prometheus.io/port: "8000"
     spec:
       serviceAccountName: {{ include "hdfs-log-anomaly.serviceAccountName" . }}
+      initContainers:
+        - name: model-downloader
+          image: google/cloud-sdk:slim
+          command: ["sh", "-c"]
+          args:
+            - |
+              echo "Checking if model files exist in GCS..."
+              gsutil -q stat gs://${GCS_ARTIFACTS_BUCKET}/models/model.pt
+              if [ $? -eq 0 ]; then
+                echo "Downloading model artifacts from gs://${GCS_ARTIFACTS_BUCKET}/models/..."
+                gsutil cp gs://${GCS_ARTIFACTS_BUCKET}/models/model.pt /shared-artifacts/model.pt
+                gsutil cp gs://${GCS_ARTIFACTS_BUCKET}/models/vocab.json /shared-artifacts/vocab.json
+              else
+                echo "Model artifacts not found in GCS models/ folder. System will start in Fallback Rule mode."
+              fi
+          env:
+            - name: GCS_ARTIFACTS_BUCKET
+              value: {{ .Values.env.GCS_ARTIFACTS_BUCKET | quote }}
+          volumeMounts:
+            - name: shared-model-volume
+              mountPath: /shared-artifacts
       containers:
         - name: api
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
@@ -32,6 +53,9 @@ spec:
             - secretRef:
                 name: {{ .Values.secret.name }}
                 optional: true
+          volumeMounts:
+            - name: shared-model-volume
+              mountPath: /app/artifacts
           readinessProbe:
             httpGet:
               path: /health
@@ -42,3 +66,7 @@ spec:
               port: 8000
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
+      volumes:
+        - name: shared-model-volume
+          emptyDir: {}
+
